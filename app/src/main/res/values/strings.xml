@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Base64_practice2</string>
+    <string name="encodeButton">ENCODE</string>
+    <string name="decodeButoon">DECODE</string>
+</resources>
