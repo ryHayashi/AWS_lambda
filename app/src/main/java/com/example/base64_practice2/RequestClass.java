@@ -20,6 +20,11 @@ public class RequestClass {
         data = new DataClass(id, title, latitude, longitude, image);
     }
 
+    public RequestClass(String op, String title, Double latitude, Double longitude, String image) {
+        this.op = op;
+        data = new DataClass(title, latitude, longitude, image);
+    }
+
     public RequestClass(String op, Double latitude, Double longitude) {
         this.op = op;
         data = new DataClass(latitude,longitude);

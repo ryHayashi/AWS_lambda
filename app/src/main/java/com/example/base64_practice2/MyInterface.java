@@ -10,7 +10,8 @@ public interface MyInterface {
      * The function name is the method name.
      */
     @LambdaFunction
-    List<DataClass> ctx19team8_toEC2s3(RequestClass request);
+    String ctx19team8_toEC2s3(RequestClass request);
+
 
 
 }

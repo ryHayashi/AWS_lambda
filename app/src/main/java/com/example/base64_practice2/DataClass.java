@@ -47,6 +47,13 @@ public class DataClass {
         this.image = image;
     }
 
+    public DataClass(String title,  Double latitude, Double longitude, String image) {
+        this.title = title;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.image = image;
+    }
+
     public DataClass( Double latitude, Double longitude) {
         this.latitude = latitude;
         this.longitude = longitude;

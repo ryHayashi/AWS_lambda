@@ -1,24 +1,18 @@
 package com.example.base64_practice2
 
-
-import android.Manifest.permission.READ_EXTERNAL_STORAGE
-import android.content.ContentResolver
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.BitmapRegionDecoder
-import android.net.Uri
 import android.os.Bundle
-import android.provider.MediaStore
-import android.system.Os.close
-import android.widget.ImageView
+import android.util.Base64
+import android.util.Log
 import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-import androidx.core.app.ActivityCompat.startActivityForResult
 import androidx.core.content.ContextCompat
-import androidx.core.content.IntentCompat
 import com.amazonaws.auth.CognitoCachingCredentialsProvider
 import com.amazonaws.mobileconnectors.lambdainvoker.LambdaFunctionException
 import com.amazonaws.mobileconnectors.lambdainvoker.LambdaInvokerFactory
@@ -33,24 +27,21 @@ import kotlinx.coroutines.runBlocking
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.lang.Exception
-import java.util.*
-import java.util.jar.Manifest
-
 
 class MainActivity : AppCompatActivity() {
 
     var sImage:String=""
-    var getImage:String=""
+    var imageUrl = arrayOf<String>()
 
-
+    //
+    private lateinit var Launcher: ActivityResultLauncher<Intent>
+    //
     private lateinit var binding: ActivityMainBinding
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
 
         setContentView(binding.root)
-
-
 
         //encode押した処理
         binding.encode.setOnClickListener {
@@ -77,76 +68,81 @@ class MainActivity : AppCompatActivity() {
         }
         //decode押した処理
         binding.decode.setOnClickListener {
-            val bytes : ByteArray = Base64.getDecoder().decode(getImage.toByteArray())
-            val bitmap:Bitmap=BitmapFactory.decodeByteArray(bytes,0,bytes.size)
+
+            //ここで取得したurlにアクセスし、s3から画像を取得
+            val getImage = ""
+
+            val bytes : ByteArray = Base64.decode(getImage,Base64.NO_WRAP)
+            val bitmap:Bitmap = BitmapFactory.decodeByteArray(bytes!!,0,bytes.size)
             binding.imageView.setImageBitmap(bitmap)
 
         }
 
         //送信
         binding.insertButton.setOnClickListener {
-            val res: List<DataClass> = lambdaConnect(RequestClass("insert", "10", "androidTest", 1.2, 12.3, sImage))
+            lambdaConnect(RequestClass("insert","androidTest", 1.2, 12.3, sImage))
             binding.textView.setText("insert")
         }
 
+        //取得
         binding.getButton.setOnClickListener {
-            val res: List<DataClass> = lambdaConnect(RequestClass("selectid", "10"))
-            val type = object : TypeToken<List<DataClass>>() {}.type
-            val result: List<DataClass> = Gson().fromJson(res.toString(), type)
-            if(!result.isNullOrEmpty()) {
-                getImage = result[0].getImage()
-                getImage = getImage.replace("b'", "").replace("'", "").replace("$","/").replace("%", "=")
+            try {
+                val res: String = lambdaConnect(RequestClass("select"))
+                val type = object : TypeToken<List<DataClass>>() {}.type
+                val result: List<DataClass> = Gson().fromJson(res, type)
+                imageUrl = imageUrl.filter {false}.toTypedArray()
+                for(row in result) {
+                    imageUrl.plus(row.getImage())
+                    Log.d("log", row.getImage())
+                }
+                binding.textView.setText("get")
+                binding.textView.setText(result[0].getLatitude().toString())
+            }catch(e: Exception) {
+                binding.textView.setText("get error")
             }
-            binding.textView.setText("get")
         }
 
+
+        //選択した画像をImageViewに貼り付け(アルバムが閉じたとき)
+        //onActivityResult非推奨の対応
+        Launcher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ){ result ->
+            val resultCode: Int = result.resultCode
+            val data: Intent? = result.data
+            if (resultCode == RESULT_OK) {
+                try {
+                    val inn: InputStream? = data?.getData().let { data?.getData()
+                        ?.let { it1 -> contentResolver.openInputStream(it1) } }
+                    val img: Bitmap = BitmapFactory.decodeStream(inn)
+                    val stream = ByteArrayOutputStream()
+                    img.compress(Bitmap.CompressFormat.JPEG, 100, stream)
+                    val byte: ByteArray = stream.toByteArray()
+                    sImage = Base64.encodeToString(byte, Base64.NO_WRAP)
+
+                    binding.textView.setText("ok")
+                    inn?.close()
+
+                } catch (e: Exception) {
+                    binding.textView.setText("e")
+                }
+            }
+        }
     }
-    val REQUEST_GALLERY = 0
+
 
     private fun selectImage() {
-
         // 以前のデータをクリアする
         binding.textView.setText("")
         binding.imageView.setImageBitmap(null)
-//インテントの初期化（インテントとは、他のアクティビティやアプリケーションなどと情報のやり取りを行うための箱のようなもの）
+        //インテントの初期化（インテントとは、他のアクティビティやアプリケーションなどと情報のやり取りを行うための箱のようなもの）
         val intent = Intent(Intent.ACTION_VIEW)
         //タイプ
         intent.setType("image/jpeg")
         intent.setAction(Intent.ACTION_GET_CONTENT)
         //結果
-        startActivityForResult(intent, REQUEST_GALLERY)
+        Launcher.launch(intent)
 
-    }
-
-
-    //選択した画像をImageViewに貼り付け(アルバムが閉じたとき)
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_GALLERY && resultCode == RESULT_OK) {
-            try {
-                val inn: InputStream? = data?.getData().let { data?.getData()
-                    ?.let { it1 -> contentResolver.openInputStream(it1) } }
-
-                val img: Bitmap = BitmapFactory.decodeStream(inn)
-
-              //  binding.imageView.setImageBitmap(img)
-
-                val stream = ByteArrayOutputStream()
-
-                img.compress(Bitmap.CompressFormat.JPEG, 100, stream)
-
-                val byte: ByteArray = stream.toByteArray()
-
-                sImage =Base64.getEncoder().encodeToString(byte)
-
-                //binding.textView.setText(sImage)
-                binding.textView.setText("ok")
-                inn?.close()
-
-            } catch (e: Exception) {
-                binding.textView.setText("e")
-            }
-        }
     }
 
     //パーミッションの状況
@@ -166,8 +162,8 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    //
-    private fun lambdaConnect(request: RequestClass): List<DataClass>{
+    //AWSへ接続
+    private fun lambdaConnect(request: RequestClass): String{
         val cognitoProvider = CognitoCachingCredentialsProvider(
             this.applicationContext, "us-east-2:53468dae-4554-493a-b810-44cd7e534341", Regions.US_EAST_2
         )
@@ -178,31 +174,26 @@ class MainActivity : AppCompatActivity() {
             .credentialsProvider(cognitoProvider)
             .build()
 
-
-
         val myInterface = factory.build(MyInterface::class.java)
 
-
-        val result: List<DataClass> = runBlocking {
+        val result: String = runBlocking {
             CoroutineScope(Dispatchers.Default).async{
                 task(myInterface, request)
             }.await()
         }
-
         return result
 
     }
 
-    private fun task(myInterface: MyInterface, request: RequestClass): List<DataClass> {
+    //AWSへの通信
+    //戻り値はjson形式の文字列
+    private fun task(myInterface: MyInterface, request: RequestClass): String{
         try {
             return myInterface.ctx19team8_toEC2s3(request)
         } catch (lfe: LambdaFunctionException) {
-            return listOf<DataClass>()
+            return lfe.toString()
         }
     }
-
-
-    //
 
 }
 
